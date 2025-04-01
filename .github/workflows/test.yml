@@ -54,4 +54,4 @@ jobs:
           ./clox ./lox/fib.lox
           clox-rs ./lox/fib.lox
 
-          hyperfine './clox ./lox/fib.lox' 'clox-rs ./lox/fib.lox'
+          hyperfine 'clox lox/fib.lox' 'clox-rs lox/fib.lox'
