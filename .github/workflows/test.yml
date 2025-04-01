@@ -1,0 +1,50 @@
+name: test
+
+permissions:
+  contents: write
+
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -CeEuo pipefail {0}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # - target: x86_64-apple-darwin
+          #   os: macos-13
+          # - target: aarch64-apple-darwin
+          #   os: macos-14
+          # - target: x86_64-pc-windows-gnu
+          #   os: windows-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    name: build-${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: "-A warnings"
+          toolchain: "nightly"
+      - name: build-${{ matrix.target }}
+        run: |
+
+          gcc ./c/clox-one.c -o clox -O3
+          cargo install --path .
+      - name: test-${{ matrix.target }}
+        run: |
+          cargo --version
+          rustc -Vv
+
+          ./clox ./lox/fib.lox
+          clox-rs ./lox/fib.lox
+
+          time ./clox ./lox/fib.lox
+          time clox-rs ./lox/fib.lox
