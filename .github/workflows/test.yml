@@ -11,6 +11,9 @@ defaults:
   run:
     shell: bash --noprofile --norc -CeEuo pipefail {0}
 
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 jobs:
   build:
     strategy:
@@ -33,6 +36,10 @@ jobs:
         with:
           rustflags: "-A warnings"
           toolchain: "nightly"
+      - uses: easy-install/easy-setup@v1
+        with:
+          url: https://github.com/sharkdp/hyperfine
+
       - name: build-${{ matrix.target }}
         run: |
 
@@ -46,5 +53,4 @@ jobs:
           ./clox ./lox/fib.lox
           clox-rs ./lox/fib.lox
 
-          time ./clox ./lox/fib.lox
-          time clox-rs ./lox/fib.lox
+          hyperfine './clox ./lox/fib.lox' 'clox-rs ./lox/fib.lox'
