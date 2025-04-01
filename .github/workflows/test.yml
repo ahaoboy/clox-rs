@@ -36,6 +36,7 @@ jobs:
         with:
           rustflags: "-A warnings"
           toolchain: "nightly"
+          target: ${{ matrix.target }}
       - uses: easy-install/easy-setup@v1
         with:
           url: https://github.com/sharkdp/hyperfine
