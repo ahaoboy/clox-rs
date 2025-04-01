@@ -1,0 +1,807 @@
+From cd2e8a25f5c51355fa2f4de4570d30e3f6a34b42 Mon Sep 17 00:00:00 2001
+From: ahaoboy <504595380@qq.com>
+Date: Tue, 1 Apr 2025 09:19:34 +0800
+Subject: [PATCH] c2rust
+
+---
+ c/compiler.c | 92 ++++++++++++++++++++++++++--------------------------
+ c/scanner.c  | 52 ++++++++++++++---------------
+ c/vm.c       | 64 ++++++++++++++++++------------------
+ c/vm.h       |  4 +--
+ 4 files changed, 105 insertions(+), 107 deletions(-)
+
+diff --git a/c/compiler.c b/c/compiler.c
+index 463bea79..ea6fba7d 100644
+--- a/c/compiler.c
++++ b/c/compiler.c
+@@ -182,7 +182,7 @@ static void errorAtCurrent(const char* message) {
+ //< Compiling Expressions error-at-current
+ //> Compiling Expressions advance
+ 
+-static void advance() {
++static void advance_compiler() {
+   parser.previous = parser.current;
+ 
+   for (;;) {
+@@ -196,7 +196,7 @@ static void advance() {
+ //> Compiling Expressions consume
+ static void consume(TokenType type, const char* message) {
+   if (parser.current.type == type) {
+-    advance();
++    advance_compiler();
+     return;
+   }
+ 
+@@ -209,9 +209,9 @@ static bool check(TokenType type) {
+ }
+ //< Global Variables check
+ //> Global Variables match
+-static bool match(TokenType type) {
++static bool match_compiler(TokenType type) {
+   if (!check(type)) return false;
+-  advance();
++  advance_compiler();
+   return true;
+ }
+ //< Global Variables match
+@@ -482,7 +482,7 @@ static int resolveUpvalue(Compiler* compiler, Token* name) {
+   if (upvalue != -1) {
+     return addUpvalue(compiler, (uint8_t)upvalue, false);
+   }
+-  
++
+ //< resolve-upvalue-recurse
+   return -1;
+ }
+@@ -520,7 +520,7 @@ static void declareVariable() {
+     if (local->depth != -1 && local->depth < current->scopeDepth) {
+       break; // [negative]
+     }
+-    
++
+     if (identifiersEqual(name, &local->name)) {
+       error("Already a variable with this name in this scope.");
+     }
+@@ -577,7 +577,7 @@ static uint8_t argumentList() {
+       }
+ //< arg-limit
+       argCount++;
+-    } while (match(TOKEN_COMMA));
++    } while (match_compiler(TOKEN_COMMA));
+   }
+   consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+   return argCount;
+@@ -622,7 +622,7 @@ static void binary(bool canAssign) {
+ }
+ //< Compiling Expressions binary
+ //> Calls and Functions compile-call
+-static void call(bool canAssign) {
++static void call_compiler(bool canAssign) {
+   uint8_t argCount = argumentList();
+   emitBytes(OP_CALL, argCount);
+ }
+@@ -632,11 +632,11 @@ static void dot(bool canAssign) {
+   consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
+   uint8_t name = identifierConstant(&parser.previous);
+ 
+-  if (canAssign && match(TOKEN_EQUAL)) {
++  if (canAssign && match_compiler(TOKEN_EQUAL)) {
+     expression();
+     emitBytes(OP_SET_PROPERTY, name);
+ //> Methods and Initializers parse-call
+-  } else if (match(TOKEN_LEFT_PAREN)) {
++  } else if (match_compiler(TOKEN_LEFT_PAREN)) {
+     uint8_t argCount = argumentList();
+     emitBytes(OP_INVOKE, name);
+     emitByte(argCount);
+@@ -677,7 +677,7 @@ static void number() {
+ */
+ //> Compiling Expressions number
+ //> Global Variables number
+-static void number(bool canAssign) {
++static void number_compiler(bool canAssign) {
+ //< Global Variables number
+   double value = strtod(parser.previous.start, NULL);
+ /* Compiling Expressions number < Types of Values const-number-val
+@@ -705,7 +705,7 @@ static void string() {
+ */
+ //> Strings parse-string
+ //> Global Variables string
+-static void string(bool canAssign) {
++static void string_compiler(bool canAssign) {
+ //< Global Variables string
+   emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
+                                   parser.previous.length - 2)));
+@@ -747,7 +747,7 @@ static void namedVariable(Token name, bool canAssign) {
+   if (match(TOKEN_EQUAL)) {
+ */
+ //> named-variable-can-assign
+-  if (canAssign && match(TOKEN_EQUAL)) {
++  if (canAssign && match_compiler(TOKEN_EQUAL)) {
+ //< named-variable-can-assign
+     expression();
+ /* Global Variables named-variable < Local Variables emit-set
+@@ -799,7 +799,7 @@ static void super_(bool canAssign) {
+   consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+   uint8_t name = identifierConstant(&parser.previous);
+ //> super-get
+-  
++
+   namedVariable(syntheticToken("this"), false);
+ /* Superclasses super-get < Superclasses super-invoke
+   namedVariable(syntheticToken("super"), false);
+@@ -807,7 +807,7 @@ static void super_(bool canAssign) {
+ */
+ //< super-get
+ //> super-invoke
+-  if (match(TOKEN_LEFT_PAREN)) {
++  if (match_compiler(TOKEN_LEFT_PAREN)) {
+     uint8_t argCount = argumentList();
+     namedVariable(syntheticToken("super"), false);
+     emitBytes(OP_SUPER_INVOKE, name);
+@@ -826,7 +826,7 @@ static void this_(bool canAssign) {
+     error("Can't use 'this' outside of a class.");
+     return;
+   }
+-  
++
+ //< this-outside-class
+   variable(false);
+ } // [this]
+@@ -864,7 +864,7 @@ ParseRule rules[] = {
+   [TOKEN_LEFT_PAREN]    = {grouping, NULL,   PREC_NONE},
+ */
+ //> Calls and Functions infix-left-paren
+-  [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
++  [TOKEN_LEFT_PAREN]    = {grouping, call_compiler,   PREC_CALL},
+ //< Calls and Functions infix-left-paren
+   [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
+   [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE}, // [big]
+@@ -918,9 +918,9 @@ ParseRule rules[] = {
+   [TOKEN_STRING]        = {NULL,     NULL,   PREC_NONE},
+ */
+ //> Strings table-string
+-  [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
++  [TOKEN_STRING]        = {string_compiler,   NULL,   PREC_NONE},
+ //< Strings table-string
+-  [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
++  [TOKEN_NUMBER]        = {number_compiler,   NULL,   PREC_NONE},
+ /* Compiling Expressions rules < Jumping Back and Forth table-and
+   [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
+ */
+@@ -982,7 +982,7 @@ static void parsePrecedence(Precedence precedence) {
+   // What goes here?
+ */
+ //> precedence-body
+-  advance();
++  advance_compiler();
+   ParseFn prefixRule = getRule(parser.previous.type)->prefix;
+   if (prefixRule == NULL) {
+     error("Expect expression.");
+@@ -999,7 +999,7 @@ static void parsePrecedence(Precedence precedence) {
+ //> infix
+ 
+   while (precedence <= getRule(parser.current.type)->precedence) {
+-    advance();
++    advance_compiler();
+     ParseFn infixRule = getRule(parser.previous.type)->infix;
+ /* Compiling Expressions infix < Global Variables infix-rule
+     infixRule();
+@@ -1010,7 +1010,7 @@ static void parsePrecedence(Precedence precedence) {
+   }
+ //> Global Variables invalid-assign
+ 
+-  if (canAssign && match(TOKEN_EQUAL)) {
++  if (canAssign && match_compiler(TOKEN_EQUAL)) {
+     error("Invalid assignment target.");
+   }
+ //< Global Variables invalid-assign
+@@ -1058,7 +1058,7 @@ static void function(FunctionType type) {
+       }
+       uint8_t constant = parseVariable("Expect parameter name.");
+       defineVariable(constant);
+-    } while (match(TOKEN_COMMA));
++    } while (match_compiler(TOKEN_COMMA));
+   }
+ //< parameters
+   consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+@@ -1099,7 +1099,7 @@ static void method() {
+       memcmp(parser.previous.start, "init", 4) == 0) {
+     type = TYPE_INITIALIZER;
+   }
+-  
++
+ //< initializer-name
+ //> method-body
+   function(type);
+@@ -1129,7 +1129,7 @@ static void classDeclaration() {
+ 
+ //< Methods and Initializers create-class-compiler
+ //> Superclasses compile-superclass
+-  if (match(TOKEN_LESS)) {
++  if (match_compiler(TOKEN_LESS)) {
+     consume(TOKEN_IDENTIFIER, "Expect superclass name.");
+     variable(false);
+ //> inherit-self
+@@ -1143,7 +1143,7 @@ static void classDeclaration() {
+     beginScope();
+     addLocal(syntheticToken("super"));
+     defineVariable(0);
+-    
++
+ //< superclass-variable
+     namedVariable(className, false);
+     emitByte(OP_INHERIT);
+@@ -1151,7 +1151,7 @@ static void classDeclaration() {
+     classCompiler.hasSuperclass = true;
+ //< set-has-superclass
+   }
+-  
++
+ //< Superclasses compile-superclass
+ //> Methods and Initializers load-class
+   namedVariable(className, false);
+@@ -1190,7 +1190,7 @@ static void funDeclaration() {
+ static void varDeclaration() {
+   uint8_t global = parseVariable("Expect variable name.");
+ 
+-  if (match(TOKEN_EQUAL)) {
++  if (match_compiler(TOKEN_EQUAL)) {
+     expression();
+   } else {
+     emitByte(OP_NIL);
+@@ -1218,9 +1218,9 @@ static void forStatement() {
+   consume(TOKEN_SEMICOLON, "Expect ';'.");
+ */
+ //> for-initializer
+-  if (match(TOKEN_SEMICOLON)) {
++  if (match_compiler(TOKEN_SEMICOLON)) {
+     // No initializer.
+-  } else if (match(TOKEN_VAR)) {
++  } else if (match_compiler(TOKEN_VAR)) {
+     varDeclaration();
+   } else {
+     expressionStatement();
+@@ -1233,7 +1233,7 @@ static void forStatement() {
+ */
+ //> for-exit
+   int exitJump = -1;
+-  if (!match(TOKEN_SEMICOLON)) {
++  if (!match_compiler(TOKEN_SEMICOLON)) {
+     expression();
+     consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+ 
+@@ -1247,7 +1247,7 @@ static void forStatement() {
+   consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+ */
+ //> for-increment
+-  if (!match(TOKEN_RIGHT_PAREN)) {
++  if (!match_compiler(TOKEN_RIGHT_PAREN)) {
+     int bodyJump = emitJump(OP_JUMP);
+     int incrementStart = currentChunk()->count;
+     expression();
+@@ -1297,7 +1297,7 @@ static void ifStatement() {
+ //< pop-end
+ //> compile-else
+ 
+-  if (match(TOKEN_ELSE)) statement();
++  if (match_compiler(TOKEN_ELSE)) statement();
+ //< compile-else
+ //> patch-else
+   patchJump(elseJump);
+@@ -1319,7 +1319,7 @@ static void returnStatement() {
+   }
+ 
+ //< return-from-script
+-  if (match(TOKEN_SEMICOLON)) {
++  if (match_compiler(TOKEN_SEMICOLON)) {
+     emitReturn();
+   } else {
+ //> Methods and Initializers return-from-init
+@@ -1375,26 +1375,26 @@ static void synchronize() {
+         ; // Do nothing.
+     }
+ 
+-    advance();
++    advance_compiler();
+   }
+ }
+ //< Global Variables synchronize
+ //> Global Variables declaration
+ static void declaration() {
+ //> Classes and Instances match-class
+-  if (match(TOKEN_CLASS)) {
++  if (match_compiler(TOKEN_CLASS)) {
+     classDeclaration();
+ /* Calls and Functions match-fun < Classes and Instances match-class
+   if (match(TOKEN_FUN)) {
+ */
+-  } else if (match(TOKEN_FUN)) {
++  } else if (match_compiler(TOKEN_FUN)) {
+ //< Classes and Instances match-class
+ //> Calls and Functions match-fun
+     funDeclaration();
+ /* Global Variables match-var < Calls and Functions match-fun
+   if (match(TOKEN_VAR)) {
+ */
+-  } else if (match(TOKEN_VAR)) {
++  } else if (match_compiler(TOKEN_VAR)) {
+ //< Calls and Functions match-fun
+ //> match-var
+     varDeclaration();
+@@ -1413,26 +1413,26 @@ static void declaration() {
+ //< Global Variables declaration
+ //> Global Variables statement
+ static void statement() {
+-  if (match(TOKEN_PRINT)) {
++  if (match_compiler(TOKEN_PRINT)) {
+     printStatement();
+ //> Jumping Back and Forth parse-for
+-  } else if (match(TOKEN_FOR)) {
++  } else if (match_compiler(TOKEN_FOR)) {
+     forStatement();
+ //< Jumping Back and Forth parse-for
+ //> Jumping Back and Forth parse-if
+-  } else if (match(TOKEN_IF)) {
++  } else if (match_compiler(TOKEN_IF)) {
+     ifStatement();
+ //< Jumping Back and Forth parse-if
+ //> Calls and Functions match-return
+-  } else if (match(TOKEN_RETURN)) {
++  } else if (match_compiler(TOKEN_RETURN)) {
+     returnStatement();
+ //< Calls and Functions match-return
+ //> Jumping Back and Forth parse-while
+-  } else if (match(TOKEN_WHILE)) {
++  } else if (match_compiler(TOKEN_WHILE)) {
+     whileStatement();
+ //< Jumping Back and Forth parse-while
+ //> Local Variables parse-block
+-  } else if (match(TOKEN_LEFT_BRACE)) {
++  } else if (match_compiler(TOKEN_LEFT_BRACE)) {
+     beginScope();
+     block();
+     endScope();
+@@ -1489,7 +1489,7 @@ ObjFunction* compile(const char* source) {
+   parser.panicMode = false;
+ 
+ //< init-parser-error
+-  advance();
++  advance_compiler();
+ //< Compiling Expressions compile-chunk
+ /* Compiling Expressions compile-chunk < Global Variables compile
+   expression();
+@@ -1497,7 +1497,7 @@ ObjFunction* compile(const char* source) {
+ */
+ //> Global Variables compile
+ 
+-  while (!match(TOKEN_EOF)) {
++  while (!match_compiler(TOKEN_EOF)) {
+     declaration();
+   }
+ 
+diff --git a/c/scanner.c b/c/scanner.c
+index d40e4383..44d9c1e6 100644
+--- a/c/scanner.c
++++ b/c/scanner.c
+@@ -37,13 +37,13 @@ static bool isAtEnd() {
+ }
+ //< is-at-end
+ //> advance
+-static char advance() {
++static char advance_scanner() {
+   scanner.current++;
+   return scanner.current[-1];
+ }
+ //< advance
+ //> peek
+-static char peek() {
++static char peek_scanner() {
+   return *scanner.current;
+ }
+ //< peek
+@@ -54,7 +54,7 @@ static char peekNext() {
+ }
+ //< peek-next
+ //> match
+-static bool match(char expected) {
++static bool match_scanner(char expected) {
+   if (isAtEnd()) return false;
+   if (*scanner.current != expected) return false;
+   scanner.current++;
+@@ -84,24 +84,24 @@ static Token errorToken(const char* message) {
+ //> skip-whitespace
+ static void skipWhitespace() {
+   for (;;) {
+-    char c = peek();
++    char c = peek_scanner();
+     switch (c) {
+       case ' ':
+       case '\r':
+       case '\t':
+-        advance();
++        advance_scanner();
+         break;
+ //> newline
+       case '\n':
+         scanner.line++;
+-        advance();
++        advance_scanner();
+         break;
+ //< newline
+ //> comment
+       case '/':
+         if (peekNext() == '/') {
+           // A comment goes until the end of the line.
+-          while (peek() != '\n' && !isAtEnd()) advance();
++          while (peek_scanner() != '\n' && !isAtEnd()) advance_scanner();
+         } else {
+           return;
+         }
+@@ -168,36 +168,36 @@ static TokenType identifierType() {
+ //< identifier-type
+ //> identifier
+ static Token identifier() {
+-  while (isAlpha(peek()) || isDigit(peek())) advance();
++  while (isAlpha(peek_scanner()) || isDigit(peek_scanner())) advance_scanner();
+   return makeToken(identifierType());
+ }
+ //< identifier
+ //> number
+-static Token number() {
+-  while (isDigit(peek())) advance();
++static Token number_scanner() {
++  while (isDigit(peek_scanner())) advance_scanner();
+ 
+   // Look for a fractional part.
+-  if (peek() == '.' && isDigit(peekNext())) {
++  if (peek_scanner() == '.' && isDigit(peekNext())) {
+     // Consume the ".".
+-    advance();
++    advance_scanner();
+ 
+-    while (isDigit(peek())) advance();
++    while (isDigit(peek_scanner())) advance_scanner();
+   }
+ 
+   return makeToken(TOKEN_NUMBER);
+ }
+ //< number
+ //> string
+-static Token string() {
+-  while (peek() != '"' && !isAtEnd()) {
+-    if (peek() == '\n') scanner.line++;
+-    advance();
++static Token string_scanner() {
++  while (peek_scanner() != '"' && !isAtEnd()) {
++    if (peek_scanner() == '\n') scanner.line++;
++    advance_scanner();
+   }
+ 
+   if (isAtEnd()) return errorToken("Unterminated string.");
+ 
+   // The closing quote.
+-  advance();
++  advance_scanner();
+   return makeToken(TOKEN_STRING);
+ }
+ //< string
+@@ -210,13 +210,13 @@ Token scanToken() {
+ 
+   if (isAtEnd()) return makeToken(TOKEN_EOF);
+ //> scan-char
+-  
+-  char c = advance();
++
++  char c = advance_scanner();
+ //> scan-identifier
+   if (isAlpha(c)) return identifier();
+ //< scan-identifier
+ //> scan-number
+-  if (isDigit(c)) return number();
++  if (isDigit(c)) return number_scanner();
+ //< scan-number
+ 
+   switch (c) {
+@@ -234,19 +234,19 @@ Token scanToken() {
+ //> two-char
+     case '!':
+       return makeToken(
+-          match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
++          match_scanner('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
+     case '=':
+       return makeToken(
+-          match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
++          match_scanner('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+     case '<':
+       return makeToken(
+-          match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
++          match_scanner('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
+     case '>':
+       return makeToken(
+-          match('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
++          match_scanner('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+ //< two-char
+ //> scan-string
+-    case '"': return string();
++    case '"': return string_scanner();
+ //< scan-string
+   }
+ //< scan-char
+diff --git a/c/vm.c b/c/vm.c
+index fde80702..aff5f785 100644
+--- a/c/vm.c
++++ b/c/vm.c
+@@ -159,7 +159,7 @@ Value pop() {
+ }
+ //< pop
+ //> Types of Values peek
+-static Value peek(int distance) {
++static Value peek_vm(int distance) {
+   return vm.stackTop[-1 - distance];
+ }
+ //< Types of Values peek
+@@ -168,7 +168,7 @@ static bool call(ObjFunction* function, int argCount) {
+ */
+ //> Calls and Functions call
+ //> Closures call-signature
+-static bool call(ObjClosure* closure, int argCount) {
++static bool call_vm(ObjClosure* closure, int argCount) {
+ //< Closures call-signature
+ /* Calls and Functions check-arity < Closures check-arity
+   if (argCount != function->arity) {
+@@ -215,7 +215,7 @@ static bool callValue(Value callee, int argCount) {
+ //> store-receiver
+         vm.stackTop[-argCount - 1] = bound->receiver;
+ //< store-receiver
+-        return call(bound->method, argCount);
++        return call_vm(bound->method, argCount);
+       }
+ //< Methods and Initializers call-bound-method
+ //> Classes and Instances call-class
+@@ -226,7 +226,7 @@ static bool callValue(Value callee, int argCount) {
+         Value initializer;
+         if (tableGet(&klass->methods, vm.initString,
+                      &initializer)) {
+-          return call(AS_CLOSURE(initializer), argCount);
++          return call_vm(AS_CLOSURE(initializer), argCount);
+ //> no-init-arity-error
+         } else if (argCount != 0) {
+           runtimeError("Expected 0 arguments but got %d.",
+@@ -240,7 +240,7 @@ static bool callValue(Value callee, int argCount) {
+ //< Classes and Instances call-class
+ //> Closures call-value-closure
+       case OBJ_CLOSURE:
+-        return call(AS_CLOSURE(callee), argCount);
++        return call_vm(AS_CLOSURE(callee), argCount);
+ //< Closures call-value-closure
+ /* Calls and Functions call-value < Closures call-value-closure
+       case OBJ_FUNCTION: // [switch]
+@@ -271,12 +271,12 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
+     runtimeError("Undefined property '%s'.", name->chars);
+     return false;
+   }
+-  return call(AS_CLOSURE(method), argCount);
++  return call_vm(AS_CLOSURE(method), argCount);
+ }
+ //< Methods and Initializers invoke-from-class
+ //> Methods and Initializers invoke
+ static bool invoke(ObjString* name, int argCount) {
+-  Value receiver = peek(argCount);
++  Value receiver = peek_vm(argCount);
+ //> invoke-check-type
+ 
+   if (!IS_INSTANCE(receiver)) {
+@@ -306,7 +306,7 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
+     return false;
+   }
+ 
+-  ObjBoundMethod* bound = newBoundMethod(peek(0),
++  ObjBoundMethod* bound = newBoundMethod(peek_vm(0),
+                                          AS_CLOSURE(method));
+   pop();
+   push(OBJ_VAL(bound));
+@@ -355,8 +355,8 @@ static void closeUpvalues(Value* last) {
+ //< Closures close-upvalues
+ //> Methods and Initializers define-method
+ static void defineMethod(ObjString* name) {
+-  Value method = peek(0);
+-  ObjClass* klass = AS_CLASS(peek(1));
++  Value method = peek_vm(0);
++  ObjClass* klass = AS_CLASS(peek_vm(1));
+   tableSet(&klass->methods, name, method);
+   pop();
+ }
+@@ -373,8 +373,8 @@ static void concatenate() {
+   ObjString* a = AS_STRING(pop());
+ */
+ //> Garbage Collection concatenate-peek
+-  ObjString* b = AS_STRING(peek(0));
+-  ObjString* a = AS_STRING(peek(1));
++  ObjString* b = AS_STRING(peek_vm(0));
++  ObjString* a = AS_STRING(peek_vm(1));
+ //< Garbage Collection concatenate-peek
+ 
+   int length = a->length + b->length;
+@@ -436,7 +436,7 @@ static InterpretResult run() {
+ //> Types of Values binary-op
+ #define BINARY_OP(valueType, op) \
+     do { \
+-      if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
++      if (!IS_NUMBER(peek_vm(0)) || !IS_NUMBER(peek_vm(1))) { \
+         runtimeError("Operands must be numbers."); \
+         return INTERPRET_RUNTIME_ERROR; \
+       } \
+@@ -515,7 +515,7 @@ static InterpretResult run() {
+         vm.stack[slot] = peek(0);
+ */
+ //> Calls and Functions set-local
+-        frame->slots[slot] = peek(0);
++        frame->slots[slot] = peek_vm(0);
+ //< Calls and Functions set-local
+         break;
+       }
+@@ -535,7 +535,7 @@ static InterpretResult run() {
+ //> Global Variables interpret-define-global
+       case OP_DEFINE_GLOBAL: {
+         ObjString* name = READ_STRING();
+-        tableSet(&vm.globals, name, peek(0));
++        tableSet(&vm.globals, name, peek_vm(0));
+         pop();
+         break;
+       }
+@@ -543,7 +543,7 @@ static InterpretResult run() {
+ //> Global Variables interpret-set-global
+       case OP_SET_GLOBAL: {
+         ObjString* name = READ_STRING();
+-        if (tableSet(&vm.globals, name, peek(0))) {
++        if (tableSet(&vm.globals, name, peek_vm(0))) {
+           tableDelete(&vm.globals, name); // [delete]
+           runtimeError("Undefined variable '%s'.", name->chars);
+           return INTERPRET_RUNTIME_ERROR;
+@@ -561,22 +561,22 @@ static InterpretResult run() {
+ //> Closures interpret-set-upvalue
+       case OP_SET_UPVALUE: {
+         uint8_t slot = READ_BYTE();
+-        *frame->closure->upvalues[slot]->location = peek(0);
++        *frame->closure->upvalues[slot]->location = peek_vm(0);
+         break;
+       }
+ //< Closures interpret-set-upvalue
+ //> Classes and Instances interpret-get-property
+       case OP_GET_PROPERTY: {
+ //> get-not-instance
+-        if (!IS_INSTANCE(peek(0))) {
++        if (!IS_INSTANCE(peek_vm(0))) {
+           runtimeError("Only instances have properties.");
+           return INTERPRET_RUNTIME_ERROR;
+         }
+ 
+ //< get-not-instance
+-        ObjInstance* instance = AS_INSTANCE(peek(0));
++        ObjInstance* instance = AS_INSTANCE(peek_vm(0));
+         ObjString* name = READ_STRING();
+-        
++
+         Value value;
+         if (tableGet(&instance->fields, name, &value)) {
+           pop(); // Instance.
+@@ -601,14 +601,14 @@ static InterpretResult run() {
+ //> Classes and Instances interpret-set-property
+       case OP_SET_PROPERTY: {
+ //> set-not-instance
+-        if (!IS_INSTANCE(peek(1))) {
++        if (!IS_INSTANCE(peek_vm(1))) {
+           runtimeError("Only instances have fields.");
+           return INTERPRET_RUNTIME_ERROR;
+         }
+ 
+ //< set-not-instance
+-        ObjInstance* instance = AS_INSTANCE(peek(1));
+-        tableSet(&instance->fields, READ_STRING(), peek(0));
++        ObjInstance* instance = AS_INSTANCE(peek_vm(1));
++        tableSet(&instance->fields, READ_STRING(), peek_vm(0));
+         Value value = pop();
+         pop();
+         push(value);
+@@ -619,7 +619,7 @@ static InterpretResult run() {
+       case OP_GET_SUPER: {
+         ObjString* name = READ_STRING();
+         ObjClass* superclass = AS_CLASS(pop());
+-        
++
+         if (!bindMethod(superclass, name)) {
+           return INTERPRET_RUNTIME_ERROR;
+         }
+@@ -652,9 +652,9 @@ static InterpretResult run() {
+ */
+ //> Strings add-strings
+       case OP_ADD: {
+-        if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
++        if (IS_STRING(peek_vm(0)) && IS_STRING(peek_vm(1))) {
+           concatenate();
+-        } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
++        } else if (IS_NUMBER(peek_vm(0)) && IS_NUMBER(peek_vm(1))) {
+           double b = AS_NUMBER(pop());
+           double a = AS_NUMBER(pop());
+           push(NUMBER_VAL(a + b));
+@@ -678,7 +678,7 @@ static InterpretResult run() {
+ //< Types of Values op-not
+ //> Types of Values op-negate
+       case OP_NEGATE:
+-        if (!IS_NUMBER(peek(0))) {
++        if (!IS_NUMBER(peek_vm(0))) {
+           runtimeError("Operand must be a number.");
+           return INTERPRET_RUNTIME_ERROR;
+         }
+@@ -711,7 +711,7 @@ static InterpretResult run() {
+         if (isFalsey(peek(0))) vm.ip += offset;
+ */
+ //> Calls and Functions jump-if-false
+-        if (isFalsey(peek(0))) frame->ip += offset;
++        if (isFalsey(peek_vm(0))) frame->ip += offset;
+ //< Calls and Functions jump-if-false
+         break;
+       }
+@@ -731,7 +731,7 @@ static InterpretResult run() {
+ //> Calls and Functions interpret-call
+       case OP_CALL: {
+         int argCount = READ_BYTE();
+-        if (!callValue(peek(argCount), argCount)) {
++        if (!callValue(peek_vm(argCount), argCount)) {
+           return INTERPRET_RUNTIME_ERROR;
+         }
+ //> update-frame-after-call
+@@ -824,7 +824,7 @@ static InterpretResult run() {
+ //< Classes and Instances interpret-class
+ //> Superclasses interpret-inherit
+       case OP_INHERIT: {
+-        Value superclass = peek(1);
++        Value superclass = peek_vm(1);
+ //> inherit-non-class
+         if (!IS_CLASS(superclass)) {
+           runtimeError("Superclass must be a class.");
+@@ -832,7 +832,7 @@ static InterpretResult run() {
+         }
+ 
+ //< inherit-non-class
+-        ObjClass* subclass = AS_CLASS(peek(0));
++        ObjClass* subclass = AS_CLASS(peek_vm(0));
+         tableAddAll(&AS_CLASS(superclass)->methods,
+                     &subclass->methods);
+         pop(); // Subclass.
+@@ -914,7 +914,7 @@ InterpretResult interpret(const char* source) {
+   ObjClosure* closure = newClosure(function);
+   pop();
+   push(OBJ_VAL(closure));
+-  call(closure, 0);
++  call_vm(closure, 0);
+ //< Closures interpret
+ //< Scanning on Demand vm-interpret-c
+ //> Compiling Expressions interpret-chunk
+diff --git a/c/vm.h b/c/vm.h
+index c1804516..875a79ed 100644
+--- a/c/vm.h
++++ b/c/vm.h
+@@ -2,9 +2,7 @@
+ #ifndef clox_vm_h
+ #define clox_vm_h
+ 
+-/* A Virtual Machine vm-h < Calls and Functions vm-include-object
+ #include "chunk.h"
+-*/
+ //> Calls and Functions vm-include-object
+ #include "object.h"
+ //< Calls and Functions vm-include-object
+@@ -48,7 +46,7 @@ typedef struct {
+ //> Calls and Functions frame-array
+   CallFrame frames[FRAMES_MAX];
+   int frameCount;
+-  
++
+ //< Calls and Functions frame-array
+ //> vm-stack
+   Value stack[STACK_MAX];
+-- 
+2.48.1
+
